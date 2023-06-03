@@ -32,7 +32,6 @@
 
 
 #define BUTTON_PIN 0
-#define BUTTON_GPIO_PIN GPIO_NUM_0
 
 
 
@@ -41,46 +40,35 @@
 
 
 
-#define MAX_TOGGLE_COUNT 2
-#define MAX_SMARTCONFIG_COUNT 4
-#define BUTTON_DEBOUNCE_TIME 200
+#define MAX_TOGGLE_COUNT 4
 #define TIMEOUT_MS 500
 
 TimerHandle_t toggle_timeout_timer;
-TimerHandle_t config_timeout_timer;
 volatile int toggleButtonPressCount = 0;
-volatile int configButtonPressCount = 0;
 volatile int lastToggleButtonPressTime = 0;
-volatile int lastConfigButtonPressTime = 0;
 
 void toggle_timeout_callback(TimerHandle_t xTimer)
 {
     toggleButtonPressCount = 0;
 }
 
-void config_timeout_callback(TimerHandle_t xTimer)
-{
-    configButtonPressCount = 0;
-}
 
 void IRAM_ATTR button_isr_handler(void *arg)
 {
     int now = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
-    // Toggle Button
-    if (now - lastToggleButtonPressTime > BUTTON_DEBOUNCE_TIME)
-    {
-        toggleButtonPressCount++;
-        lastToggleButtonPressTime = now;
-        xTimerStart(toggle_timeout_timer, portMAX_DELAY);
-    }
-
-    // Config Button
-    if (now - lastConfigButtonPressTime > BUTTON_DEBOUNCE_TIME)
-    {
-        configButtonPressCount++;
-        lastConfigButtonPressTime = now;
-        xTimerStart(config_timeout_timer, portMAX_DELAY);
+    int new_button_state = gpio_get_level(BUTTON_PIN);
+    if (new_button_state != button_state) {
+	    vTaskDelay(50 / portTICK_PERIOD_MS);
+	    new_button_state = gpio_get_level(BUTTON_PIN);
+	    if (new_button_state != button_state) {
+	    	button_state = new_button_state;
+	        if (button_state == 0) {
+			toggleButtonPressCount++;
+			lastToggleButtonPressTime = now;
+			xTimerStart(toggle_timeout_timer, portMAX_DELAY);
+    		}
+	    }
     }
 }
 
@@ -110,8 +98,6 @@ void IRAM_ATTR button_isr_handler(void *arg)
 
 
 
-int button_state = 0;
-int button_press_count = 0;
 
 void ButtonRead(){
 	    while (1) {
@@ -124,11 +110,7 @@ void ButtonRead(){
 	                if (button_state == 0) {
 	                    button_press_count++;
 
-	                    if(button_press_count == 2)
-	                    	 printf("Button pressed 2 times\n");
-	                    if (button_press_count == 4) {
-	                        printf("Button pressed 4 times\n");
-	                        button_press_count = 0;
+	                    
 	                    }
 	                }
 	            }
@@ -523,14 +505,20 @@ void toggle_task(void *pvParameters)
 {
     while (1)
     {
-        if (toggleButtonPressCount >= MAX_TOGGLE_COUNT)
-        {
+        if (toggleButtonPressCount >= 4){
+	    printf("Smart Config action triggered!\n");
+            toggleButtonPressCount = 0;
+            xTimerStop(toggle_timeout_timer, portMAX_DELAY);
+	}
+        
+	if(button_press_count >= 2 && button_press_count < 4){
             printf("Toggle action triggered!\n");
             flag = 1;
             toggleButtonPressCount = 0;
             xTimerStop(toggle_timeout_timer, portMAX_DELAY);
         }
         vTaskDelay(pdMS_TO_TICKS(100));
+	    
     }
 }
 
@@ -544,13 +532,9 @@ void smartconfig_task(void *pvParameters)
             configButtonPressCount = 0;
             xTimerStop(config_timeout_timer, portMAX_DELAY);
         }
-
+	
         // Check for timeout and reset count
-        if (xTimerIsTimerActive(config_timeout_timer) == pdFALSE)
-        {
-            configButtonPressCount = 0;
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
+       
     }
 }
 
