@@ -1,13 +1,13 @@
 
 ### Smart Config ##
 1. Đầu tiên, vừa vào sẽ khởi tạo smartconfig để bắt wifi.
-2. Bắt được wifi, sẽ bắt đầu khởi tạo MQTT client, MQTT handler
-    và Task để đọc Trigger_Task, Smartconfig_Task từ BUTTON.
+2. Bắt được wifi, sẽ bắt đầu khởi tạo MQTT_client, MQTT_handler
+    và Task để đọc Toggle_Task, Smartconfig_Task từ BUTTON.
 
 ### MQTT handler ### 
 1. Khi kết nối được với MQTT handler sẽ bắt đầu tạo
-    a. Heartbeat Task để publish mỗi 60 giây {"heartbeat":1}
-    b. Trigger Task để nhận flag khi nhấn nút 2 lần và publish trigger đèn
+    a. Heartbeat_Task() để publish mỗi 60 giây {"heartbeat":1}\\
+    b. Trigger_Task() để nhận flag khi nhấn nút 2 lần và publish trigger đèn\\
 
 Ở đây sử dụng QOS = 1
     Khi publish thành công sẽ có EVENT_PUBLISH trả về các flag EVENT_TRIG, EVENT_HEART
@@ -15,7 +15,8 @@
     Nếu nhận được ACK từ server thì set flag EVENT mới và bắt đầu chu kỳ tiếp theo --> thành công
     Nếu quá 20 giây thì phải gửi lại.
 
-    Cả 2 hàm Trigger() và Heartbeat() đều sử dụng cơ chế đợi EVENT_FLAG từ MQTT_handler->EVENT_PUBLISH
+    Cả 2 hàm Trigger_Task() và Heartbeat_Task() đều sử dụng cơ chế đợi EVENT_FLAG từ MQTT_handler->EVENT_PUBLISH
+    Chỉ khi nào FLAG được set hoặc timeout thì mới tiếp tục thành công hoặc gửi lại nếu lỗi.
 
 ### 4 lần nhấn ###
 Thì thay vì smartconfig sẽ restart() lại chương trình
