@@ -32,6 +32,7 @@
 
 
 #define BUTTON_PIN 0
+#define BUTTON_GPIO_PIN GPIO_NUM_0
 
 
 
@@ -40,35 +41,46 @@
 
 
 
-#define MAX_TOGGLE_COUNT 4
+#define MAX_TOGGLE_COUNT 2
+#define MAX_SMARTCONFIG_COUNT 4
+#define BUTTON_DEBOUNCE_TIME 200
 #define TIMEOUT_MS 500
 
 TimerHandle_t toggle_timeout_timer;
+TimerHandle_t config_timeout_timer;
 volatile int toggleButtonPressCount = 0;
+volatile int configButtonPressCount = 0;
 volatile int lastToggleButtonPressTime = 0;
+volatile int lastConfigButtonPressTime = 0;
 
 void toggle_timeout_callback(TimerHandle_t xTimer)
 {
     toggleButtonPressCount = 0;
 }
 
+void config_timeout_callback(TimerHandle_t xTimer)
+{
+    configButtonPressCount = 0;
+}
 
 void IRAM_ATTR button_isr_handler(void *arg)
 {
     int now = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
-    int new_button_state = gpio_get_level(BUTTON_PIN);
-    if (new_button_state != button_state) {
-	    vTaskDelay(50 / portTICK_PERIOD_MS);
-	    new_button_state = gpio_get_level(BUTTON_PIN);
-	    if (new_button_state != button_state) {
-	    	button_state = new_button_state;
-	        if (button_state == 0) {
-			toggleButtonPressCount++;
-			lastToggleButtonPressTime = now;
-			xTimerStart(toggle_timeout_timer, portMAX_DELAY);
-    		}
-	    }
+    // Toggle Button
+    if (now - lastToggleButtonPressTime > BUTTON_DEBOUNCE_TIME)
+    {
+        toggleButtonPressCount++;
+        lastToggleButtonPressTime = now;
+        xTimerStart(toggle_timeout_timer, portMAX_DELAY);
+    }
+
+    // Config Button
+    if (now - lastConfigButtonPressTime > BUTTON_DEBOUNCE_TIME)
+    {
+        configButtonPressCount++;
+        lastConfigButtonPressTime = now;
+        xTimerStart(config_timeout_timer, portMAX_DELAY);
     }
 }
 
@@ -98,6 +110,8 @@ void IRAM_ATTR button_isr_handler(void *arg)
 
 
 
+int button_state = 0;
+int button_press_count = 0;
 
 void ButtonRead(){
 	    while (1) {
@@ -110,7 +124,11 @@ void ButtonRead(){
 	                if (button_state == 0) {
 	                    button_press_count++;
 
-	                    
+	                    if(button_press_count == 2)
+	                    	 printf("Button pressed 2 times\n");
+	                    if (button_press_count == 4) {
+	                        printf("Button pressed 4 times\n");
+	                        button_press_count = 0;
 	                    }
 	                }
 	            }
@@ -139,6 +157,9 @@ int flag = 1;
 
 static const char *TAG = "MQTT_STATUS";
 esp_mqtt_client_handle_t client;
+esp_mqtt_client_handle_t* client_ptr = NULL;
+
+
 //AT+SMPUB="messages/d86dabaa-d818-4e30-b7ee-fa649f772bda/update",15,0,1
 //AT+SMSUB="messages/d86dabaa-d818-4e30-b7ee-fa649f772bda/status"
 //C3ZBwHndbwMkOXIz4HmJWRs9OrddkTfU
@@ -166,7 +187,10 @@ static void Led_init(void){
 
 
 static EventGroupHandle_t mqtt_event_group;
-static const int MQTT_ACK  = BIT5;
+static const int MQTT_ACK_TRIG  = BIT7;
+static const int MQTT_ACK_HEART  = BIT8;
+static int trig_id = 0;
+static int heart_id = 0;
 
 void heartbeat(void* arg){
 	while(1){
@@ -176,21 +200,23 @@ void heartbeat(void* arg){
 
 		char data_send[30] = "{\"heartbeat\": 1}";
 		int len = strlen(data_send);
-		        //esp_mqtt_client_publish(client, "jackwrion12345/feeds/bbc-led", event->data_len, event->data, 0, 1);
-		printf("CALL....HEART\n");
-		esp_mqtt_client_publish(client2, "messages/d86dabaa-d818-4e30-b7ee-fa649f772bda/update", data_send,len, 0, 1);
+		//esp_mqtt_client_publish(client, "jackwrion12345/feeds/bbc-led", event->data_len, event->data, 0, 1);
+		printf("CALL....HEARTBEAT\n");
+		heart_id = esp_mqtt_client_publish(client2, "messages/d86dabaa-d818-4e30-b7ee-fa649f772bda/update", data_send,len, 1, 1);
 
 		EventBits_t uxBits;
-		uxBits = xEventGroupWaitBits(mqtt_event_group, MQTT_ACK, true, false, 5000 / portTICK_PERIOD_MS);
-		if(uxBits & MQTT_ACK) {
-			printf("ACK..\n");
-	        xEventGroupClearBits(mqtt_event_group, MQTT_ACK);
+		uxBits = xEventGroupWaitBits(mqtt_event_group, MQTT_ACK_HEART, true, false, 20000 / portTICK_PERIOD_MS);
+		if(uxBits & MQTT_ACK_HEART) {
+			printf("ACK HEARTBEAT\n");
+	        xEventGroupClearBits(mqtt_event_group, MQTT_ACK_HEART);
 	        vTaskDelay(10000 / portTICK_PERIOD_MS);
 		}
 		else{
+			printf("ERROR HEARTBEAT\n");
+			xEventGroupClearBits(mqtt_event_group, MQTT_ACK_HEART);
 			vTaskDelay(100 / portTICK_PERIOD_MS);
 		}
-		vTaskDelay(1000 / portTICK_PERIOD_MS);
+		vTaskDelay(100 / portTICK_PERIOD_MS);
 	}
 }
 
@@ -216,23 +242,24 @@ void trigger(void* arg){
 				trigger_state = 1;
 			}
 
-
-
 			//esp_mqtt_client_publish(client, "jackwrion12345/feeds/bbc-led", event->data_len, event->data, 0, 1);
 			//printf("CALL....HEART\n");
-			esp_mqtt_client_publish(client2, "messages/d86dabaa-d818-4e30-b7ee-fa649f772bda/update", data_send,len, 0, 1);
+			trig_id = esp_mqtt_client_publish(client2, "messages/d86dabaa-d818-4e30-b7ee-fa649f772bda/update", data_send,len, 1, 1);
+			EventBits_t uxBits;
+			uxBits = xEventGroupWaitBits(mqtt_event_group, MQTT_ACK_TRIG, true, false, 20000 / portTICK_PERIOD_MS);
 
-
-			if(1) {
-				printf("STATUS..\n");
-		        xEventGroupClearBits(mqtt_event_group, MQTT_ACK);
-		        vTaskDelay(10000 / portTICK_PERIOD_MS);
+			if( uxBits & MQTT_ACK_TRIG) {
+				printf("Ack trigger\n");
+		        xEventGroupClearBits(mqtt_event_group, MQTT_ACK_TRIG);
+		        vTaskDelay(100 / portTICK_PERIOD_MS);
+		        flag = 0;
 			}
 			else{
+				flag = 1;
+				xEventGroupClearBits(mqtt_event_group, MQTT_ACK_TRIG);
 				vTaskDelay(100 / portTICK_PERIOD_MS);
 			}
 
-		flag = 0;
 		}
 		vTaskDelay(100 / portTICK_PERIOD_MS);
 	}
@@ -243,18 +270,20 @@ void trigger(void* arg){
 
 void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-	char *data;
+	char data[100];
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
     esp_mqtt_event_handle_t event = event_data;
     client = event->client;
-    //int msg_id = event->msg_id;
+
+    client_ptr = &client;
+
+    int msg_id = event->msg_id;
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");				//*** config Message here
         //esp_mqtt_client_subscribe(client,"jackwrion12345/feeds/bbc-led", 0);	//ID cua device, va lay thuoc tinh status
         esp_mqtt_client_subscribe(client,"messages/d86dabaa-d818-4e30-b7ee-fa649f772bda/status", 0);	//ID cua device, va lay thuoc tinh status
         xTaskCreate(heartbeat, "heartbeat", 1024*2, &client, configMAX_PRIORITIES, NULL);
-
         xTaskCreate(trigger, "trigger", 1024*2, &client, configMAX_PRIORITIES, NULL);
 
         break;
@@ -268,7 +297,10 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
         ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
         break;
     case MQTT_EVENT_PUBLISHED:
-        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);		//*** config Message to publish here
+        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+        if (msg_id == trig_id) xEventGroupSetBits(mqtt_event_group, MQTT_ACK_TRIG);
+        else if (msg_id == heart_id) xEventGroupSetBits(mqtt_event_group, MQTT_ACK_HEART);
+        //*** config Message to publish here
 //        char data_send[30] = "{\"heartbeat\": 1}";
 //        int len = strlen(data_send);
 //        //esp_mqtt_client_publish(client, "jackwrion12345/feeds/bbc-led", event->data_len, event->data, 0, 1);
@@ -286,27 +318,24 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");									//*** Recieve data here
         printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
         printf("DATA=%.*s\r\n", event->data_len, event->data);
-        data = event->data;
+        //data = event->data;
 
+        int len2 = snprintf(data, sizeof(data), "DATA=%.*s\r\n", event->data_len, event->data);
         //{"led":2,"status":"on"}
-        xEventGroupSetBits(mqtt_event_group, MQTT_ACK);
+
+        if (strstr(data,"heartbeat") || strstr(data,"code") ){
+       		break;
+       	}
+       	else if (  strstr(data, "on")   ){
+       		printf("ON......\n");
+       		gpio_set_level(2,1);
+       	}
+       	else {
+       		printf("OFF......\n");
+       		gpio_set_level(2,0);
+        }
 
 
-        int led_num = *(data+7)-48;
-        //printf("%s",data);
-        if (1){
-        	if (  strstr(data, "on")   ){
-        		printf("ON......\n");
-        		gpio_set_level(2,1);
-        	}
-        	else {
-        		printf("OFF......\n");
-        		gpio_set_level(2,0);
-        	}
-        }
-        else {
-        	gpio_set_level(2,0);
-        }
         break;
 
 
@@ -448,9 +477,10 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         xEventGroupSetBits(s_wifi_event_group, ESPTOUCH_DONE_BIT);
     }
 
-
-
 }
+
+
+
 
 static void initialise_wifi(void)
 {
@@ -505,20 +535,14 @@ void toggle_task(void *pvParameters)
 {
     while (1)
     {
-        if (toggleButtonPressCount >= 4){
-	    printf("Smart Config action triggered!\n");
-            toggleButtonPressCount = 0;
-            xTimerStop(toggle_timeout_timer, portMAX_DELAY);
-	}
-        
-	if(button_press_count >= 2 && button_press_count < 4){
+        if (toggleButtonPressCount >= MAX_TOGGLE_COUNT)
+        {
             printf("Toggle action triggered!\n");
             flag = 1;
             toggleButtonPressCount = 0;
             xTimerStop(toggle_timeout_timer, portMAX_DELAY);
         }
         vTaskDelay(pdMS_TO_TICKS(100));
-	    
     }
 }
 
@@ -531,10 +555,16 @@ void smartconfig_task(void *pvParameters)
             printf("Smart Config action triggered!\n");
             configButtonPressCount = 0;
             xTimerStop(config_timeout_timer, portMAX_DELAY);
+            esp_restart();
+
         }
-	
+
         // Check for timeout and reset count
-       
+        if (xTimerIsTimerActive(config_timeout_timer) == pdFALSE)
+        {
+            configButtonPressCount = 0;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
