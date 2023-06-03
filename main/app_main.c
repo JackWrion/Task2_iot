@@ -93,65 +93,6 @@ void IRAM_ATTR button_isr_handler(void *arg)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-int button_state = 0;
-int button_press_count = 0;
-
-void ButtonRead(){
-	    while (1) {
-	        int new_button_state = gpio_get_level(BUTTON_PIN);
-	        if (new_button_state != button_state) {
-	            vTaskDelay(50 / portTICK_PERIOD_MS);
-	            new_button_state = gpio_get_level(BUTTON_PIN);
-	            if (new_button_state != button_state) {
-	                button_state = new_button_state;
-	                if (button_state == 0) {
-	                    button_press_count++;
-
-	                    if(button_press_count == 2)
-	                    	 printf("Button pressed 2 times\n");
-	                    if (button_press_count == 4) {
-	                        printf("Button pressed 4 times\n");
-	                        button_press_count = 0;
-	                    }
-	                }
-	            }
-
-	        }
-	    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 int trigger_state = 0;
 int flag = 1;
 
@@ -209,7 +150,7 @@ void heartbeat(void* arg){
 		if(uxBits & MQTT_ACK_HEART) {
 			printf("ACK HEARTBEAT\n");
 	        xEventGroupClearBits(mqtt_event_group, MQTT_ACK_HEART);
-	        vTaskDelay(10000 / portTICK_PERIOD_MS);
+	        vTaskDelay(60000 / portTICK_PERIOD_MS);
 		}
 		else{
 			printf("ERROR HEARTBEAT\n");
@@ -600,7 +541,7 @@ void app_main(void)
 
 
 
-	gpio_install_isr_service(0);
+	    gpio_install_isr_service(0);
 	    gpio_isr_handler_add(BUTTON_GPIO_PIN, button_isr_handler, (void *)BUTTON_GPIO_PIN);
 	// Create software timers
 	    toggle_timeout_timer = xTimerCreate("toggle_timeout_timer", pdMS_TO_TICKS(TIMEOUT_MS),
