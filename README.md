@@ -22,3 +22,7 @@
 Thì thay vì smartconfig sẽ restart() lại chương trình
 1. Để tránh lỗi
 2. Vì chương trình sẽ bắt đầu lại từ SMARTCONFIG init nên vẫn thỏa mãn yêu cầu đề bài.
+
+
+### Demo ###
+https://drive.google.com/file/d/1tAKZf30Ns8sYbE2dZoHfCHwiQq7NgG4s/view?usp=drivesdk
