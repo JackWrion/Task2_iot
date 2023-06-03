@@ -241,19 +241,9 @@ void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event
         ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
         if (msg_id == trig_id) xEventGroupSetBits(mqtt_event_group, MQTT_ACK_TRIG);
         else if (msg_id == heart_id) xEventGroupSetBits(mqtt_event_group, MQTT_ACK_HEART);
-        //*** config Message to publish here
-//        char data_send[30] = "{\"heartbeat\": 1}";
-//        int len = strlen(data_send);
-//        //esp_mqtt_client_publish(client, "jackwrion12345/feeds/bbc-led", event->data_len, event->data, 0, 1);
-//        esp_mqtt_client_publish(client, "messages/d86dabaa-d818-4e30-b7ee-fa649f772bda/update", data_send,len, 0, 1);
         break;
 
-//    case MQTT_EVENT_BIT:
-//    	char data_send[30] = "{\"heartbeat\": 1}";
-//    	int len = strlen(data_send);
-//    	esp_mqtt_client_publish(client, "messages/d86dabaa-d818-4e30-b7ee-fa649f772bda/update", data_send, len, 0, 1);
-//    	xEventGroupClearBits(mqtt_event_group, MQTT_EVENT_BIT);
-//    	break;
+
 
     case MQTT_EVENT_DATA:
         ESP_LOGI(TAG, "MQTT_EVENT_DATA");									//*** Recieve data here
